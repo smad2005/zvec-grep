@@ -931,7 +931,7 @@ function createSchema(
         nullable: false,
         indexParams: {
           indexType: ZVecIndexType.FTS,
-          tokenizerName: "jieba",
+          tokenizerName: "standard",
           filters: ["lowercase"],
         },
       },
