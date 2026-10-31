@@ -6,6 +6,7 @@ export const STRUCTURED_CODE_FORMATS = [
   "java",
   "javascript",
   "jsx",
+  "kotlin",
   "python",
   "rust",
   "tsx",

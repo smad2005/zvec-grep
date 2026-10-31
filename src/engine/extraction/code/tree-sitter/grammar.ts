@@ -12,6 +12,7 @@ const LANGUAGE_WASM_MAP: Record<string, string> = {
   java: "java",
   javascript: "javascript",
   jsx: "javascript",
+  kotlin: "kotlin",
   python: "python",
   rust: "rust",
   tsx: "tsx",

@@ -7,6 +7,7 @@ import { CSHARP_ADAPTER } from "./languages/csharp.js";
 import { GO_ADAPTER } from "./languages/go.js";
 import { JAVA_ADAPTER } from "./languages/java.js";
 import { JAVASCRIPT_ADAPTER } from "./languages/javascript.js";
+import { KOTLIN_ADAPTER } from "./languages/kotlin.js";
 import { PYTHON_ADAPTER } from "./languages/python.js";
 import { RUST_ADAPTER } from "./languages/rust.js";
 import { TYPESCRIPT_ADAPTER } from "./languages/typescript.js";
@@ -42,6 +43,7 @@ const ADAPTERS = {
   java: JAVA_ADAPTER,
   javascript: JAVASCRIPT_ADAPTER,
   jsx: JAVASCRIPT_ADAPTER,
+  kotlin: KOTLIN_ADAPTER,
   python: PYTHON_ADAPTER,
   rust: RUST_ADAPTER,
   tsx: TYPESCRIPT_ADAPTER,
