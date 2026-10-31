@@ -7,6 +7,7 @@ const require = createRequire(import.meta.url);
 const LANGUAGE_WASM_MAP: Record<string, string> = {
   c: "c",
   cpp: "cpp",
+  csharp: "c_sharp",
   go: "go",
   java: "java",
   javascript: "javascript",

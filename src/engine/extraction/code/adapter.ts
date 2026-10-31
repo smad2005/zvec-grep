@@ -3,6 +3,7 @@ import type { StructuredCodeFormat } from "../../code-formats.js";
 import type { TSNode } from "./tree-sitter/nodes.js";
 import { C_ADAPTER } from "./languages/c.js";
 import { CPP_ADAPTER } from "./languages/cpp.js";
+import { CSHARP_ADAPTER } from "./languages/csharp.js";
 import { GO_ADAPTER } from "./languages/go.js";
 import { JAVA_ADAPTER } from "./languages/java.js";
 import { JAVASCRIPT_ADAPTER } from "./languages/javascript.js";
@@ -36,6 +37,7 @@ export type LanguageAdapter = {
 const ADAPTERS = {
   c: C_ADAPTER,
   cpp: CPP_ADAPTER,
+  csharp: CSHARP_ADAPTER,
   go: GO_ADAPTER,
   java: JAVA_ADAPTER,
   javascript: JAVASCRIPT_ADAPTER,

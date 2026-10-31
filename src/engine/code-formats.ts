@@ -1,6 +1,7 @@
 export const STRUCTURED_CODE_FORMATS = [
   "c",
   "cpp",
+  "csharp",
   "go",
   "java",
   "javascript",
