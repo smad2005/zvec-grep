@@ -99,10 +99,14 @@ impl SymbolType {
 pub enum Language {
     C,
     Cpp,
+    CSharp,
+    Dart,
     Go,
     Java,
     JavaScript,
+    Kotlin,
     Python,
+    Ruby,
     Rust,
     TypeScript,
 }
@@ -113,10 +117,14 @@ impl Language {
         match self {
             Self::C => "c",
             Self::Cpp => "cpp",
+            Self::CSharp => "csharp",
+            Self::Dart => "dart",
             Self::Go => "go",
             Self::Java => "java",
             Self::JavaScript => "javascript",
+            Self::Kotlin => "kotlin",
             Self::Python => "python",
+            Self::Ruby => "ruby",
             Self::Rust => "rust",
             Self::TypeScript => "typescript",
         }

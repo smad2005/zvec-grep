@@ -349,7 +349,7 @@ mod tests {
     fn enriches_only_code_and_markdown_structures() {
         let directory = tempdir().expect("temporary directory");
         let fixtures = [
-            ("unsupported.rb", "puts \"hello\"\n"),
+            ("unsupported.lua", "print(\"hello\")\n"),
             ("plain.ts", "// no declarations\n"),
             ("plain.md", "markdown without headings\n"),
             (
@@ -364,7 +364,7 @@ mod tests {
         let result = enrich_lexical_matches_with_structure(
             directory.path(),
             vec![
-                lexical_item(directory.path(), "unsupported.rb", 1, "puts \"hello\""),
+                lexical_item(directory.path(), "unsupported.lua", 1, "print(\"hello\")"),
                 lexical_item(directory.path(), "plain.ts", 1, "// no declarations"),
                 lexical_item(directory.path(), "plain.md", 1, "markdown without headings"),
                 lexical_item(directory.path(), "structured.ts", 2, "  return \"hello\";"),
@@ -373,7 +373,7 @@ mod tests {
             STRUCTURE_FILE_LIMIT,
         );
 
-        let unsupported = item_by_relative_path(&result.items, "unsupported.rb");
+        let unsupported = item_by_relative_path(&result.items, "unsupported.lua");
         let plain_code = item_by_relative_path(&result.items, "plain.ts");
         let plain_markdown = item_by_relative_path(&result.items, "plain.md");
         let structured = item_by_relative_path(&result.items, "structured.ts");

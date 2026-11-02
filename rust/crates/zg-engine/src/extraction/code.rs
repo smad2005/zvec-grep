@@ -129,10 +129,14 @@ fn grammar(format: FileFormat, jsx: bool) -> Option<Language> {
     Some(match format {
         FileFormat::C => tree_sitter_c::LANGUAGE.into(),
         FileFormat::Cpp => tree_sitter_cpp::LANGUAGE.into(),
+        FileFormat::CSharp => tree_sitter_c_sharp::LANGUAGE.into(),
+        FileFormat::Dart => tree_sitter_dart::LANGUAGE.into(),
         FileFormat::Go => tree_sitter_go::LANGUAGE.into(),
         FileFormat::Java => tree_sitter_java::LANGUAGE.into(),
         FileFormat::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+        FileFormat::Kotlin => tree_sitter_kotlin_ng::LANGUAGE.into(),
         FileFormat::Python => tree_sitter_python::LANGUAGE.into(),
+        FileFormat::Ruby => tree_sitter_ruby::LANGUAGE.into(),
         FileFormat::Rust => tree_sitter_rust::LANGUAGE.into(),
         FileFormat::TypeScript if !jsx => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
         FileFormat::TypeScript => tree_sitter_typescript::LANGUAGE_TSX.into(),
@@ -1785,7 +1789,7 @@ public class Service {
     #[test]
     fn unsupported_and_declaration_free_code_fall_back_to_plain_text() {
         for source in [
-            test_source(FileFormat::Ruby, "fixture.rb", "puts 'hello'"),
+            test_source(FileFormat::Lua, "fixture.lua", "print('hello')"),
             test_source(FileFormat::TypeScript, "plain.ts", "// no declarations"),
         ] {
             let fragments = extract(&source, ChunkOptions::default()).expect("fallback");

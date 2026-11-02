@@ -43,6 +43,61 @@ const CPP: LanguageAdapter = LanguageAdapter {
         "union_specifier",
     ],
 };
+const CSHARP: LanguageAdapter = LanguageAdapter {
+    kind: Language::CSharp,
+    entity_types: &[
+        "class_declaration",
+        "constructor_declaration",
+        "conversion_operator_declaration",
+        "delegate_declaration",
+        "destructor_declaration",
+        "enum_declaration",
+        "event_declaration",
+        "event_field_declaration",
+        "field_declaration",
+        "indexer_declaration",
+        "interface_declaration",
+        "method_declaration",
+        "operator_declaration",
+        "property_declaration",
+        "record_declaration",
+        "record_struct_declaration",
+        "struct_declaration",
+    ],
+    scope_types: &[
+        "class_declaration",
+        "file_scoped_namespace_declaration",
+        "interface_declaration",
+        "namespace_declaration",
+        "record_declaration",
+        "record_struct_declaration",
+        "struct_declaration",
+    ],
+};
+const DART: LanguageAdapter = LanguageAdapter {
+    kind: Language::Dart,
+    entity_types: &[
+        "class_declaration",
+        "declaration",
+        "enum_declaration",
+        "extension_declaration",
+        "extension_type_declaration",
+        "function_declaration",
+        "getter_declaration",
+        "method_declaration",
+        "mixin_declaration",
+        "setter_declaration",
+        "top_level_variable_declaration",
+        "type_alias",
+    ],
+    scope_types: &[
+        "class_declaration",
+        "enum_declaration",
+        "extension_declaration",
+        "extension_type_declaration",
+        "mixin_declaration",
+    ],
+};
 const GO: LanguageAdapter = LanguageAdapter {
     kind: Language::Go,
     entity_types: &[
@@ -89,6 +144,19 @@ const JAVASCRIPT: LanguageAdapter = LanguageAdapter {
     ],
     scope_types: &["class_declaration"],
 };
+const KOTLIN: LanguageAdapter = LanguageAdapter {
+    kind: Language::Kotlin,
+    entity_types: &[
+        "class_declaration",
+        "companion_object",
+        "function_declaration",
+        "object_declaration",
+        "property_declaration",
+        "secondary_constructor",
+        "type_alias",
+    ],
+    scope_types: &["class_declaration", "companion_object", "object_declaration"],
+};
 const PYTHON: LanguageAdapter = LanguageAdapter {
     kind: Language::Python,
     entity_types: &[
@@ -97,6 +165,18 @@ const PYTHON: LanguageAdapter = LanguageAdapter {
         "function_definition",
     ],
     scope_types: &["class_definition", "decorated_definition"],
+};
+const RUBY: LanguageAdapter = LanguageAdapter {
+    kind: Language::Ruby,
+    entity_types: &[
+        "alias",
+        "class",
+        "method",
+        "module",
+        "singleton_class",
+        "singleton_method",
+    ],
+    scope_types: &["class", "module", "singleton_class"],
 };
 const RUST: LanguageAdapter = LanguageAdapter {
     kind: Language::Rust,
@@ -150,10 +230,14 @@ pub(super) fn resolve_adapter(format: FileFormat) -> Option<&'static LanguageAda
     match format {
         FileFormat::C => Some(&C),
         FileFormat::Cpp => Some(&CPP),
+        FileFormat::CSharp => Some(&CSHARP),
+        FileFormat::Dart => Some(&DART),
         FileFormat::Go => Some(&GO),
         FileFormat::Java => Some(&JAVA),
         FileFormat::JavaScript => Some(&JAVASCRIPT),
+        FileFormat::Kotlin => Some(&KOTLIN),
         FileFormat::Python => Some(&PYTHON),
+        FileFormat::Ruby => Some(&RUBY),
         FileFormat::Rust => Some(&RUST),
         FileFormat::TypeScript => Some(&TYPESCRIPT),
         _ => None,
@@ -230,6 +314,10 @@ impl LanguageAdapter {
                     field_text(node, "name", source)
                 }
             }
+            Language::CSharp => extract_csharp_name(node, source),
+            Language::Dart => extract_dart_name(node, source),
+            Language::Kotlin => extract_kotlin_name(node, source),
+            Language::Ruby => extract_ruby_name(node, source),
         }
     }
 
@@ -290,6 +378,10 @@ impl LanguageAdapter {
             Language::Go => classify_go(node),
             Language::Java if node.kind() == "field_declaration" => Some(SymbolType::Value),
             Language::JavaScript | Language::TypeScript => classify_javascript_typescript(node),
+            Language::CSharp => classify_csharp(node),
+            Language::Dart => classify_dart(node),
+            Language::Kotlin => classify_kotlin(node),
+            Language::Ruby => classify_ruby(node),
             _ => classify_code_node(node),
         }
     }
@@ -303,6 +395,10 @@ impl LanguageAdapter {
                 let definition = inner_python_definition(node).unwrap_or(node);
                 extract_generic_signature(definition, source)
             }
+            // An endless method (`def name(arg) = value`) keeps its `=` before the body.
+            Language::Ruby => extract_generic_signature(node, source)
+                .map(|signature| signature.trim_end_matches('=').trim_end().to_owned())
+                .filter(|signature| !signature.is_empty()),
             _ => extract_generic_signature(node, source),
         }
     }
@@ -319,6 +415,13 @@ impl LanguageAdapter {
                     | "variable_declaration"
             ),
             Language::Go => parent.kind() == "type_declaration",
+            // Comments sit beside the `class_member` wrapper, not the declaration.
+            Language::Dart => parent.kind() == "class_member",
+            // Comments above the first member of a body are siblings of the body.
+            Language::Ruby => {
+                parent.kind() == "body_statement"
+                    && parent.named_child(0).is_some_and(|first| first == declaration)
+            }
             _ => false,
         }) {
             if let Some(outer) = extract_preceding_doc(parent, source) {
@@ -543,6 +646,217 @@ fn classify_go(node: Node<'_>) -> Option<SymbolType> {
     }
 }
 
+fn has_child_kind(node: Node<'_>, kind: &str) -> bool {
+    let mut cursor = node.walk();
+    node.children(&mut cursor).any(|child| child.kind() == kind)
+}
+
+fn first_named_child_text(node: Node<'_>, kind: &str, source: &[u8]) -> Option<String> {
+    named_children(node)
+        .into_iter()
+        .find(|child| child.kind() == kind)
+        .map(|child| text(child, source).to_owned())
+}
+
+fn join_names(names: &[String]) -> Option<String> {
+    (!names.is_empty()).then(|| names.join(", "))
+}
+
+fn extract_csharp_name(node: Node<'_>, source: &[u8]) -> Option<String> {
+    match node.kind() {
+        "field_declaration" | "event_field_declaration" => {
+            let declaration = named_children(node)
+                .into_iter()
+                .find(|child| child.kind() == "variable_declaration")?;
+            join_names(
+                &named_children(declaration)
+                    .into_iter()
+                    .filter(|child| child.kind() == "variable_declarator")
+                    .filter_map(|declarator| name_field(declarator, source))
+                    .collect::<Vec<_>>(),
+            )
+        }
+        "indexer_declaration" => Some("this[]".to_owned()),
+        "operator_declaration" => {
+            field_text(node, "operator", source).map(|operator| format!("operator {operator}"))
+        }
+        "conversion_operator_declaration" => {
+            let direction = if has_child_kind(node, "explicit") {
+                "explicit"
+            } else {
+                "implicit"
+            };
+            field_text(node, "type", source)
+                .map(|target| format!("{direction} operator {target}"))
+        }
+        _ => name_field(node, source),
+    }
+}
+
+fn classify_csharp(node: Node<'_>) -> Option<SymbolType> {
+    match node.kind() {
+        "record_struct_declaration" | "struct_declaration" => Some(SymbolType::Class),
+        "delegate_declaration" => Some(SymbolType::Alias),
+        "event_declaration" | "event_field_declaration" | "field_declaration"
+        | "property_declaration" => Some(SymbolType::Value),
+        "conversion_operator_declaration"
+        | "destructor_declaration"
+        | "indexer_declaration"
+        | "operator_declaration" => Some(SymbolType::Function),
+        _ => classify_code_node(node),
+    }
+}
+
+fn extract_dart_name(node: Node<'_>, source: &[u8]) -> Option<String> {
+    match node.kind() {
+        "function_declaration" | "getter_declaration" | "setter_declaration" => node
+            .child_by_field_name("signature")
+            .and_then(|signature| field_text(signature, "name", source)),
+        "method_declaration" => node
+            .child_by_field_name("signature")
+            .and_then(|signature| extract_dart_member_name(signature, source)),
+        "declaration" | "top_level_variable_declaration" => {
+            extract_dart_member_name(node, source)
+        }
+        "type_alias" => first_named_child_text(node, "type_identifier", source),
+        "extension_type_declaration" => node
+            .child_by_field_name("name")
+            .map(|name| find_descendant_by_kind(name, "identifier").unwrap_or(name))
+            .map(|name| text(name, source).to_owned()),
+        _ => name_field(node, source),
+    }
+}
+
+// Dart members wrap their names in one of several signature or variable-list nodes.
+fn extract_dart_member_name(node: Node<'_>, source: &[u8]) -> Option<String> {
+    named_children(node).into_iter().find_map(|item| match item.kind() {
+        "constructor_signature" | "function_signature" | "getter_signature"
+        | "setter_signature" => field_text(item, "name", source),
+        "constant_constructor_signature"
+        | "factory_constructor_signature"
+        | "redirecting_factory_constructor_signature" => {
+            let parts = named_children(item)
+                .into_iter()
+                .filter(|child| child.kind() == "identifier")
+                .map(|child| text(child, source))
+                .collect::<Vec<_>>();
+            (!parts.is_empty()).then(|| parts.join("."))
+        }
+        "operator_signature" => {
+            let value = text(item, source);
+            let operator = value
+                .split('(')
+                .next()?
+                .rsplit_once("operator")?
+                .1
+                .trim();
+            (!operator.is_empty()).then(|| format!("operator {operator}"))
+        }
+        "identifier_list" | "initialized_identifier_list" | "static_final_declaration_list" => {
+            join_names(
+                &named_children(item)
+                    .into_iter()
+                    .filter_map(|variable| {
+                        if variable.kind() == "identifier" {
+                            Some(text(variable, source).to_owned())
+                        } else {
+                            name_field(variable, source)
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        }
+        _ => None,
+    })
+}
+
+fn classify_dart(node: Node<'_>) -> Option<SymbolType> {
+    match node.kind() {
+        "class_declaration"
+        | "extension_declaration"
+        | "extension_type_declaration"
+        | "mixin_declaration" => Some(SymbolType::Class),
+        "enum_declaration" => Some(SymbolType::Enum),
+        "type_alias" => Some(SymbolType::Alias),
+        "function_declaration" | "getter_declaration" | "method_declaration"
+        | "setter_declaration" => Some(SymbolType::Function),
+        "declaration" => Some(
+            if named_children(node)
+                .into_iter()
+                .any(|child| child.kind().ends_with("_signature"))
+            {
+                SymbolType::Function
+            } else {
+                SymbolType::Value
+            },
+        ),
+        "top_level_variable_declaration" => Some(SymbolType::Value),
+        _ => classify_code_node(node),
+    }
+}
+
+fn extract_kotlin_name(node: Node<'_>, source: &[u8]) -> Option<String> {
+    match node.kind() {
+        "companion_object" => {
+            field_text(node, "name", source).or_else(|| Some("companion".to_owned()))
+        }
+        "secondary_constructor" => Some("constructor".to_owned()),
+        "property_declaration" => {
+            if let Some(variable) = named_children(node)
+                .into_iter()
+                .find(|child| child.kind() == "variable_declaration")
+            {
+                first_named_child_text(variable, "identifier", source)
+            } else {
+                first_named_child_text(node, "multi_variable_declaration", source)
+            }
+        }
+        // The alias name is the `type` field; the aliased type is a `type` child.
+        "type_alias" => first_named_child_text(node, "identifier", source),
+        _ => name_field(node, source),
+    }
+}
+
+fn classify_kotlin(node: Node<'_>) -> Option<SymbolType> {
+    match node.kind() {
+        "class_declaration" if has_child_kind(node, "interface") => Some(SymbolType::Interface),
+        "class_declaration" if has_child_kind(node, "enum_class_body") => Some(SymbolType::Enum),
+        "class_declaration" | "companion_object" | "object_declaration" => {
+            Some(SymbolType::Class)
+        }
+        "function_declaration" | "secondary_constructor" => Some(SymbolType::Function),
+        "property_declaration" => Some(SymbolType::Value),
+        "type_alias" => Some(SymbolType::Alias),
+        _ => classify_code_node(node),
+    }
+}
+
+fn extract_ruby_name(node: Node<'_>, source: &[u8]) -> Option<String> {
+    match node.kind() {
+        "singleton_class" => Some(format!(
+            "<< {}",
+            field_text(node, "value", source).unwrap_or_else(|| "self".to_owned())
+        )),
+        "singleton_method" => {
+            let name = field_text(node, "name", source)?;
+            Some(match field_text(node, "object", source) {
+                Some(object) => format!("{object}.{name}"),
+                None => name,
+            })
+        }
+        _ => field_text(node, "name", source),
+    }
+}
+
+fn classify_ruby(node: Node<'_>) -> Option<SymbolType> {
+    match node.kind() {
+        "class" | "singleton_class" => Some(SymbolType::Class),
+        "module" => Some(SymbolType::Module),
+        "alias" | "method" | "singleton_method" => Some(SymbolType::Function),
+        _ => None,
+    }
+}
+
 fn should_index_javascript_typescript_entity(node: Node<'_>) -> bool {
     if node.kind() == "method_definition"
         && node
@@ -754,7 +1068,9 @@ fn append_signature(
                     | "block"
                     | "class_body"
                     | "declaration_list"
+                    | "enum_class_body"
                     | "field_declaration_list"
+                    | "function_body"
             )
         })
     });
@@ -816,7 +1132,11 @@ fn extract_preceding_doc(node: Node<'_>, source: &[u8]) -> Option<String> {
 fn is_comment(node: Node<'_>) -> bool {
     matches!(
         node.kind(),
-        "comment" | "line_comment" | "block_comment" | "documentation_comment"
+        "comment"
+            | "line_comment"
+            | "block_comment"
+            | "documentation_block_comment"
+            | "documentation_comment"
     )
 }
 
