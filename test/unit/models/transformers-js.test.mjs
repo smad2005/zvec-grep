@@ -858,7 +858,13 @@ for (const device of [undefined, "auto", "cpu", "cuda", "vulkan"]) {
     assert.deepEqual(providers, [
       device === undefined || device === "auto"
         ? undefined
-        : [device === "vulkan" ? "webgpu" : device],
+        : [
+            device === "vulkan"
+              ? process.platform === "win32"
+                ? "dml"
+                : "webgpu"
+              : device,
+          ],
     ]);
     await model.dispose();
   });

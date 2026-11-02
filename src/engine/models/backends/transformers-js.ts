@@ -554,6 +554,7 @@ async function findTruncatedInputIndexes(
 
 function resolveExecutionProvider(
   device: CreateEmbeddingModelOptions["device"],
+  platform: NodeJS.Platform = process.platform,
 ): TransformersJsExecutionProvider | null {
   if (device === undefined || device === "auto") {
     // Use the runtime's Node default (CPU). Platform support for an execution
@@ -562,6 +563,11 @@ function resolveExecutionProvider(
   }
   if (device === "cpu") {
     return "cpu";
+  }
+  // onnxruntime-node ships no WebGPU provider on Windows; DirectML is its
+  // bundled GPU provider there.
+  if (device === "vulkan" && platform === "win32") {
+    return "dml";
   }
   if (device === "metal" || device === "vulkan") {
     return "webgpu";
