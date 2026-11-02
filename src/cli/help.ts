@@ -40,6 +40,8 @@ const ENVIRONMENT_VARIABLES = {
   ZVEC_GREP_ENDPOINT: "Remote Embedding endpoint fallback",
   ZVEC_GREP_MODEL_CACHE: "Local embedding model cache directory",
   ZVEC_GREP_DEVICE: "Local embedding device: auto, cpu, metal, vulkan, or cuda",
+  ZVEC_GREP_DML_DEVICE_ID:
+    "DirectML adapter index for Transformers.js models with --device vulkan on Windows; indexing defaults to the GPU with the most VRAM, search to adapter 0",
   ZVEC_GREP_EMBEDDING_CONCURRENCY:
     "Local/remote index-build/update embedding concurrency; explicit index CLI option takes precedence",
   DASHSCOPE_API_KEY: "Qwen credential fallback after ZVEC_GREP_API_KEY",
@@ -233,6 +235,7 @@ ${formatEnvironmentVariables([
   "ZVEC_GREP_ENDPOINT",
   "ZVEC_GREP_MODEL_CACHE",
   "ZVEC_GREP_DEVICE",
+  "ZVEC_GREP_DML_DEVICE_ID",
   "ZVEC_GREP_EMBEDDING_CONCURRENCY",
 ])}
 
@@ -570,6 +573,7 @@ ${formatEnvironmentVariables([
   "ZVEC_GREP_ENDPOINT",
   "ZVEC_GREP_MODEL_CACHE",
   "ZVEC_GREP_DEVICE",
+  "ZVEC_GREP_DML_DEVICE_ID",
   "ZVEC_GREP_EMBEDDING_CONCURRENCY",
 ])}
 

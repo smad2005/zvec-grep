@@ -846,6 +846,7 @@ for (const device of [undefined, "auto", "cpu", "cuda", "vulkan"]) {
       { device },
       {
         resolveArtifacts: createArtifactResolver(),
+        largestDmlAdapter: async () => undefined,
         loadRuntime: async () => ({
           async pipeline(_task, _repo, options) {
             providers.push(options.session_options?.executionProviders);
@@ -1208,3 +1209,86 @@ test("Transformers.js does not treat tokenizer failures as GPU inference failure
   assert.deepEqual(providers, ["webgpu"]);
   await model.dispose();
 });
+
+test("Transformers.js passes ZVEC_GREP_DML_DEVICE_ID to DirectML on Windows", async (t) => {
+  if (process.platform !== "win32") {
+    t.skip("DirectML is selected only on Windows");
+    return;
+  }
+  const previous = process.env.ZVEC_GREP_DML_DEVICE_ID;
+  process.env.ZVEC_GREP_DML_DEVICE_ID = "1";
+  t.after(() => {
+    if (previous === undefined) {
+      delete process.env.ZVEC_GREP_DML_DEVICE_ID;
+    } else {
+      process.env.ZVEC_GREP_DML_DEVICE_ID = previous;
+    }
+  });
+  const providers = [];
+  const extractor = Object.assign(
+    async () => ({ dims: [1, 3], data: new Float32Array(3) }),
+    { tokenizer: createTokenizer(), async dispose() {} },
+  );
+  const model = new TransformersJsEmbeddingModel(
+    entry(),
+    { device: "vulkan" },
+    {
+      resolveArtifacts: createArtifactResolver(),
+      loadRuntime: async () => ({
+        async pipeline(_task, _repo, options) {
+          providers.push(options.session_options?.executionProviders);
+          return extractor;
+        },
+      }),
+    },
+  );
+  await model.embed([{ kind: "text", text: "value" }]);
+  assert.deepEqual(providers, [[{ name: "dml", deviceId: 1 }]]);
+  await model.dispose();
+});
+
+for (const [purpose, expected] of [
+  ["document", { name: "dml", deviceId: 2 }],
+  ["query", "dml"],
+]) {
+  test(`Transformers.js picks the DirectML adapter for ${purpose} embeddings without ZVEC_GREP_DML_DEVICE_ID`, async (t) => {
+    if (process.platform !== "win32") {
+      t.skip("DirectML is selected only on Windows");
+      return;
+    }
+    const previous = process.env.ZVEC_GREP_DML_DEVICE_ID;
+    delete process.env.ZVEC_GREP_DML_DEVICE_ID;
+    t.after(() => {
+      if (previous !== undefined) {
+        process.env.ZVEC_GREP_DML_DEVICE_ID = previous;
+      }
+    });
+    const providers = [];
+    let probes = 0;
+    const extractor = Object.assign(
+      async () => ({ dims: [1, 3], data: new Float32Array(3) }),
+      { tokenizer: createTokenizer(), async dispose() {} },
+    );
+    const model = new TransformersJsEmbeddingModel(
+      entry(),
+      { device: "vulkan" },
+      {
+        resolveArtifacts: createArtifactResolver(),
+        largestDmlAdapter: async () => {
+          probes++;
+          return 2;
+        },
+        loadRuntime: async () => ({
+          async pipeline(_task, _repo, options) {
+            providers.push(options.session_options?.executionProviders);
+            return extractor;
+          },
+        }),
+      },
+    );
+    await model.embed([{ kind: "text", text: "value" }], { purpose });
+    assert.deepEqual(providers, [[expected]]);
+    assert.equal(probes, purpose === "document" ? 1 : 0);
+    await model.dispose();
+  });
+}

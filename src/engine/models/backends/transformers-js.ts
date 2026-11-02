@@ -21,6 +21,7 @@ import {
   resolveLocalEmbeddingParallelism,
 } from "../local-embedding-parallelism.js";
 import { LocalEmbeddingQueue } from "../local-embedding-queue.js";
+import { largestDxgiAdapter } from "./dxgi-adapters.js";
 import {
   createModelDownloadProgressReporter,
   type ModelDownloadProgressReporter,
@@ -81,7 +82,9 @@ type TransformersJsModule = {
       dtype: "fp32" | "q8" | "q4";
       local_files_only: true;
       session_options?: {
-        executionProviders: TransformersJsExecutionProvider[];
+        executionProviders: (
+          TransformersJsExecutionProvider | { name: "dml"; deviceId: number }
+        )[];
       };
     },
   ): Promise<FeatureExtractionPipeline>;
@@ -94,6 +97,8 @@ type ResolvedModelArtifacts = Awaited<ReturnType<ModelArtifactResolver>>;
 type TransformersJsDependencies = {
   loadRuntime: TransformersJsLoader;
   resolveArtifacts: ModelArtifactResolver;
+  /** DirectML adapter index with the most dedicated video memory. */
+  largestDmlAdapter: () => Promise<number | undefined>;
 };
 
 type EmbeddingAttempt =
@@ -126,6 +131,7 @@ const defaultDependencies: TransformersJsDependencies = {
     return defaultRuntimeImport;
   },
   resolveArtifacts: resolveModelArtifacts,
+  largestDmlAdapter: largestDxgiAdapter,
 };
 
 export class TransformersJsEmbeddingModel extends BaseEmbeddingModel {
@@ -240,7 +246,10 @@ export class TransformersJsEmbeddingModel extends BaseEmbeddingModel {
     const texts = (contents as readonly TextContent[]).map((content) =>
       formatText(content.text, options.purpose, this.entry),
     );
-    const pipeline = await this.ensurePipeline(options.onProgress);
+    const pipeline = await this.ensurePipeline(
+      options.onProgress,
+      options.purpose,
+    );
     let truncatedInputIndexes: number[];
     try {
       truncatedInputIndexes = await findTruncatedInputIndexes(
@@ -288,6 +297,7 @@ export class TransformersJsEmbeddingModel extends BaseEmbeddingModel {
 
   private async ensurePipeline(
     onProgress?: (progress: EmbeddingModelProgress) => void,
+    purpose?: NormalizedEmbeddingOptions["purpose"],
   ): Promise<FeatureExtractionPipeline> {
     if (this.pipeline) {
       return this.pipeline;
@@ -301,20 +311,22 @@ export class TransformersJsEmbeddingModel extends BaseEmbeddingModel {
 
     // Normalize the shared promise itself so concurrent callers also receive
     // the terminal error for artifact resolution and runtime import failures.
-    this.pipelineLoadPromise = this.loadPipeline(onProgress).catch((cause) => {
-      this.pipelineLoadError =
-        cause instanceof EngineError && cause.code === LOAD_FAILED
-          ? cause
-          : new EngineError(
-              `Transformers.js model initialization failed (${formatErrorMessage(cause)}). Check the model files and runtime configuration, then restart the process or daemon before retrying.`,
-              {
-                code: LOAD_FAILED,
-                context: `model=${this.entry.reference} repo=${this.entry.repo}`,
-                cause,
-              },
-            );
-      throw this.pipelineLoadError;
-    });
+    this.pipelineLoadPromise = this.loadPipeline(onProgress, purpose).catch(
+      (cause) => {
+        this.pipelineLoadError =
+          cause instanceof EngineError && cause.code === LOAD_FAILED
+            ? cause
+            : new EngineError(
+                `Transformers.js model initialization failed (${formatErrorMessage(cause)}). Check the model files and runtime configuration, then restart the process or daemon before retrying.`,
+                {
+                  code: LOAD_FAILED,
+                  context: `model=${this.entry.reference} repo=${this.entry.repo}`,
+                  cause,
+                },
+              );
+        throw this.pipelineLoadError;
+      },
+    );
     try {
       this.pipeline = await this.pipelineLoadPromise;
       return this.pipeline;
@@ -325,6 +337,7 @@ export class TransformersJsEmbeddingModel extends BaseEmbeddingModel {
 
   private async loadPipeline(
     onProgress?: (progress: EmbeddingModelProgress) => void,
+    purpose?: NormalizedEmbeddingOptions["purpose"],
   ): Promise<FeatureExtractionPipeline> {
     const downloadProgress = createModelDownloadProgressReporter(
       this.entry.reference,
@@ -343,6 +356,7 @@ export class TransformersJsEmbeddingModel extends BaseEmbeddingModel {
         runtime,
         resolvedArtifacts.directory,
         executionProvider,
+        purpose,
       );
     } catch (cause) {
       const recovery =
@@ -423,14 +437,38 @@ export class TransformersJsEmbeddingModel extends BaseEmbeddingModel {
     runtime: TransformersJsModule,
     modelDirectory: string,
     executionProvider: TransformersJsExecutionProvider | null,
+    purpose?: NormalizedEmbeddingOptions["purpose"],
   ): Promise<FeatureExtractionPipeline> {
+    const provider =
+      executionProvider === "dml"
+        ? await this.resolveDmlProvider(purpose)
+        : executionProvider;
     return await runtime.pipeline("feature-extraction", modelDirectory, {
       dtype: this.entry.dtype,
       local_files_only: true,
       ...(executionProvider
-        ? { session_options: { executionProviders: [executionProvider] } }
+        ? {
+            session_options: {
+              executionProviders: [provider ?? executionProvider],
+            },
+          }
         : {}),
     });
+  }
+
+  // An explicit ZVEC_GREP_DML_DEVICE_ID wins. Otherwise a pipeline loaded to embed
+  // documents (indexing) uses the adapter with the most dedicated video memory,
+  // while one loaded for a query keeps the DirectML default and skips the probe.
+  private async resolveDmlProvider(
+    purpose?: NormalizedEmbeddingOptions["purpose"],
+  ): Promise<"dml" | { name: "dml"; deviceId: number }> {
+    const explicit = parseDmlDeviceId(process.env.ZVEC_GREP_DML_DEVICE_ID);
+    const deviceId =
+      explicit ??
+      (purpose === "document"
+        ? await this.dependencies.largestDmlAdapter()
+        : undefined);
+    return deviceId === undefined ? "dml" : { name: "dml", deviceId };
   }
 
   private async ensureArtifacts(
@@ -577,6 +615,25 @@ function resolveExecutionProvider(
   }
 
   return null;
+}
+
+// DirectML numbers adapters in DXGI order, which can differ from Vulkan's, so
+// GGML_VK_VISIBLE_DEVICES does not apply here.
+function parseDmlDeviceId(value: string | undefined): number | undefined {
+  const trimmed = value?.trim() ?? "";
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+  if (!/^\d+$/.test(trimmed)) {
+    throw new EngineError(
+      "ZVEC_GREP_DML_DEVICE_ID must be a non-negative integer",
+      {
+        code: "ZVEC_GREP.ENGINE.MODELS.INVALID_DML_DEVICE_ID",
+        context: `ZVEC_GREP_DML_DEVICE_ID=${value}`,
+      },
+    );
+  }
+  return Number(trimmed);
 }
 
 function formatErrorMessage(error: unknown): string {
