@@ -10,7 +10,7 @@ import type {
 import { makeEntityId } from "../ids.js";
 import { validateSourceFile, type Source, type TextSource } from "../source.js";
 import { hasGrammar } from "./tree-sitter/grammar.js";
-import type { TSNode } from "./tree-sitter/nodes.js";
+import { namedChildren, children, type TSNode } from "./tree-sitter/nodes.js";
 import { withParser } from "./tree-sitter/parser.js";
 import type { ChunkOptions } from "../types.js";
 import { extractPlainTextFragments } from "../text/extractor.js";
@@ -227,7 +227,7 @@ function walkCodeNode(
   breadcrumb: readonly string[],
   out: CodeEntity[],
 ): void {
-  for (const child of node.children) {
+  for (const child of children(node)) {
     const isScope =
       adapter.scopeTypes.has(child.type) &&
       adapter.shouldEnterScope?.(child) !== false;
@@ -357,7 +357,7 @@ function* splitLargeNode(
   overlapChars: number,
 ): Generator<CodeWindow> {
   const body = node.childForFieldName("body") ?? node;
-  const statements = body.namedChildren;
+  const statements = namedChildren(body);
 
   if (statements.length <= 1) {
     yield* splitTextByLines(
@@ -774,7 +774,7 @@ function collectStructureOutlineMembers(
       return;
     }
 
-    for (const child of node.namedChildren) {
+    for (const child of namedChildren(node)) {
       visit(child, depth + 1);
     }
   };
@@ -815,7 +815,7 @@ function collectFunctionCallNames(node: TSNode): string[] {
       }
     }
 
-    for (const child of current.namedChildren) {
+    for (const child of namedChildren(current)) {
       visit(child);
     }
   };
@@ -841,7 +841,7 @@ function extractCallName(node: TSNode): string | undefined {
     node.childForFieldName("name") ??
     node.childForFieldName("constructor") ??
     node.childForFieldName("type") ??
-    node.namedChildren[0];
+    namedChildren(node)[0];
 
   if (!target) {
     return undefined;
@@ -906,7 +906,7 @@ function classifyCodeNode(
   const nodeType = node.type;
 
   if (nodeType === "decorated_definition") {
-    const inner = node.namedChildren.find(
+    const inner = namedChildren(node).find(
       (child) =>
         child.type === "function_definition" ||
         child.type === "class_definition",

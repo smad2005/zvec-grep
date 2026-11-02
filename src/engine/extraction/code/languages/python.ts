@@ -1,5 +1,5 @@
 import type { CodeEntityModifier } from "../../../types.js";
-import type { TSNode } from "../tree-sitter/nodes.js";
+import { namedChildren, type TSNode } from "../tree-sitter/nodes.js";
 import type { LanguageAdapter } from "../adapter.js";
 import {
   extractCommonModifiers,
@@ -17,7 +17,7 @@ export const PYTHON_ADAPTER: LanguageAdapter = {
   scopeTypes: new Set(["class_definition", "decorated_definition"]),
   extractName(node) {
     if (node.type === "decorated_definition") {
-      const inner = node.namedChildren.find(
+      const inner = namedChildren(node).find(
         (child) =>
           child.type === "function_definition" ||
           child.type === "class_definition",
@@ -32,7 +32,7 @@ export const PYTHON_ADAPTER: LanguageAdapter = {
       return true;
     }
 
-    return node.namedChildren.some(
+    return namedChildren(node).some(
       (child) => child.type === "class_definition",
     );
   },
@@ -42,7 +42,7 @@ export const PYTHON_ADAPTER: LanguageAdapter = {
     }
 
     return (
-      node.namedChildren.find((child) => child.type === "class_definition") ??
+      namedChildren(node).find((child) => child.type === "class_definition") ??
       node
     );
   },
@@ -70,7 +70,7 @@ function innerPythonDefinition(node: TSNode): TSNode | undefined {
     return undefined;
   }
 
-  return node.namedChildren.find(
+  return namedChildren(node).find(
     (child) =>
       child.type === "function_definition" || child.type === "class_definition",
   );

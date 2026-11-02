@@ -348,3 +348,122 @@ test("code chunk boundaries never split Unicode surrogate pairs", async () => {
     assert.doesNotMatch(fragment.content.text, /^[\uDC00-\uDFFF]/u);
   }
 });
+
+test("code extractor parses Ruby, Dart, C#, and Kotlin structurally", async () => {
+  const extractor = new CodeExtractor();
+  const ruby = codeSource(
+    "ruby",
+    [
+      "module Shop",
+      "  class Cart < Base",
+      "    # Adds an item.",
+      "    def add(item)",
+      "      items << item",
+      "    end",
+      "    def self.empty; end",
+      "  end",
+      "end",
+    ].join("\n"),
+    "fixture.rb",
+  );
+  const dart = codeSource(
+    "dart",
+    [
+      "class Cart {",
+      "  final List<int> items;",
+      "  Cart(this.items);",
+      "  /// Adds an item.",
+      "  void add(int item) {",
+      "    items.add(item);",
+      "  }",
+      "}",
+      "int total(Cart cart) => cart.items.length;",
+    ].join("\n"),
+    "fixture.dart",
+  );
+  const csharp = codeSource(
+    "csharp",
+    [
+      "namespace Shop;",
+      "public class Cart {",
+      "  private int _count = 0;",
+      "  public delegate void Changed(int count);",
+      "  public static Cart operator +(Cart a, Cart b) => a;",
+      "}",
+    ].join("\n"),
+    "fixture.cs",
+  );
+  const kotlin = codeSource(
+    "kotlin",
+    [
+      "package shop",
+      "/** Storage. */",
+      "interface Repo { fun load(): String }",
+      "object Registry { fun get() = 1 }",
+      "enum class Color { RED; fun x() = 1 }",
+    ].join("\n"),
+    "fixture.kt",
+  );
+
+  const rubyFragments = await extractor.extract(ruby);
+  const add = fragmentNamed(rubyFragments, "add");
+  assert.equal(add.metadata.symbolType, "function");
+  assert.equal(add.metadata.scope, "Shop::Cart");
+  assert.equal(add.metadata.signature, "def add(item)");
+  assert.equal(add.metadata.doc, "Adds an item.");
+  assert.equal(
+    fragmentNamed(rubyFragments, "Shop").metadata.symbolType,
+    "module",
+  );
+  assert.equal(
+    fragmentNamed(rubyFragments, "self.empty").metadata.scope,
+    "Shop::Cart",
+  );
+  assert.ok(rubyFragments.every((fragment) => fragment.metadata?.symbolName));
+
+  const dartFragments = await extractor.extract(dart);
+  const dartAdd = fragmentNamed(dartFragments, "add");
+  assert.equal(dartAdd.metadata.scope, "Cart");
+  assert.equal(dartAdd.metadata.signature, "void add(int item)");
+  assert.equal(dartAdd.metadata.doc, "Adds an item.");
+  // The signature and its sibling body form a single entity.
+  assert.match(dartAdd.content.text, /items\.add\(item\);\n {2}\}$/);
+  assertSourceBackedFragment(dart, dartAdd);
+  assert.equal(
+    fragmentNamed(dartFragments, "items").metadata.symbolType,
+    "value",
+  );
+  assert.equal(
+    fragmentNamed(dartFragments, "total").content.text,
+    "int total(Cart cart) => cart.items.length;",
+  );
+
+  const csharpFragments = await extractor.extract(csharp);
+  assert.equal(
+    fragmentNamed(csharpFragments, "_count").metadata.symbolType,
+    "value",
+  );
+  assert.equal(
+    fragmentNamed(csharpFragments, "Changed").metadata.symbolType,
+    "alias",
+  );
+  assert.equal(
+    fragmentNamed(csharpFragments, "operator +").metadata.scope,
+    "Shop::Cart",
+  );
+
+  const kotlinFragments = await extractor.extract(kotlin);
+  assert.equal(
+    fragmentNamed(kotlinFragments, "Repo").metadata.symbolType,
+    "interface",
+  );
+  assert.equal(fragmentNamed(kotlinFragments, "Repo").metadata.doc, "Storage.");
+  assert.equal(
+    fragmentNamed(kotlinFragments, "Registry").metadata.symbolType,
+    "class",
+  );
+  assert.equal(
+    fragmentNamed(kotlinFragments, "Color").metadata.signature,
+    "enum class Color",
+  );
+});

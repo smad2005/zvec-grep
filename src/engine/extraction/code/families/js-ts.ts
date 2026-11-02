@@ -1,5 +1,5 @@
 import type { CodeSymbolType } from "../../../types.js";
-import type { TSNode } from "../tree-sitter/nodes.js";
+import { namedChildren, type TSNode } from "../tree-sitter/nodes.js";
 import {
   closestAncestor,
   extractCommonModifiers,
@@ -116,7 +116,7 @@ export const extractJavascriptTypescriptModifiers = extractCommonModifiers;
 function hasFunctionValue(node: TSNode): boolean {
   const value =
     node.childForFieldName("value") ??
-    node.namedChildren.find((child) =>
+    namedChildren(node).find((child) =>
       JS_TS_FUNCTION_VALUE_TYPES.has(child.type),
     );
 
@@ -132,7 +132,7 @@ function containsFunctionValue(node: TSNode): boolean {
     return false;
   }
 
-  return node.namedChildren.some((child) => containsFunctionValue(child));
+  return namedChildren(node).some((child) => containsFunctionValue(child));
 }
 
 function exportedObjectFunctionEntities(node: TSNode): TSNode[] {
@@ -148,7 +148,7 @@ function exportedObjectFunctionEntities(node: TSNode): TSNode[] {
     return [];
   }
 
-  return value.namedChildren.filter(
+  return namedChildren(value).filter(
     (child) =>
       (child.type === "pair" && hasFunctionValue(child)) ||
       child.type === "method_definition",
@@ -187,7 +187,7 @@ function isObjectMember(node: TSNode): boolean {
 }
 
 function findNamedIdentifierChild(node: TSNode): TSNode | undefined {
-  return node.namedChildren.find(
+  return namedChildren(node).find(
     (child) =>
       child.type === "identifier" ||
       child.type === "property_identifier" ||

@@ -1,5 +1,9 @@
 import type { CodeSymbolType } from "../../../types.js";
-import { findIdentifierLeaf, type TSNode } from "../tree-sitter/nodes.js";
+import {
+  findIdentifierLeaf,
+  namedChildren,
+  type TSNode,
+} from "../tree-sitter/nodes.js";
 import type { LanguageAdapter } from "../adapter.js";
 import {
   extractCommonModifiers,
@@ -165,7 +169,7 @@ function findDescendantByType(node: TSNode, type: string): TSNode | null {
     return node;
   }
 
-  for (const child of node.namedChildren) {
+  for (const child of namedChildren(node)) {
     const found = findDescendantByType(child, type);
     if (found) {
       return found;

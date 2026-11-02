@@ -1,17 +1,18 @@
 import type { CodeEntityModifier } from "../../../types.js";
-import type { TSNode } from "../tree-sitter/nodes.js";
+import { namedChildren, type TSNode } from "../tree-sitter/nodes.js";
 
 const COMMENT_TYPES = new Set([
   "comment",
   "line_comment",
   "block_comment",
   "documentation_comment",
+  "multiline_comment",
 ]);
 
 export function extractGenericSignature(node: TSNode): string | undefined {
   const body =
     node.childForFieldName("body") ??
-    node.namedChildren.find(
+    namedChildren(node).find(
       (child) =>
         child.type === "statement_block" ||
         child.type === "compound_statement" ||
@@ -41,6 +42,23 @@ export function extractPrecedingDoc(node: TSNode): string | undefined {
   while (sibling && COMMENT_TYPES.has(sibling.type)) {
     comments.unshift(cleanCommentText(sibling.text));
     sibling = sibling.previousNamedSibling;
+  }
+
+  const doc = comments.join("\n").trim();
+
+  return doc.length > 0 ? doc : undefined;
+}
+
+// Some grammars attach comments that precede a declaration to the end of the
+// previous node (for example a Kotlin `package_header`).
+export function extractTrailingDoc(node: TSNode): string | undefined {
+  const comments: string[] = [];
+
+  for (const child of namedChildren(node).reverse()) {
+    if (!COMMENT_TYPES.has(child.type)) {
+      break;
+    }
+    comments.unshift(cleanCommentText(child.text));
   }
 
   const doc = comments.join("\n").trim();

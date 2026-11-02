@@ -1,6 +1,6 @@
-import type Parser from "web-tree-sitter";
+import type { Node } from "web-tree-sitter";
 
-export type TSNode = Parser.SyntaxNode;
+export type TSNode = Node;
 
 export function findIdentifierLeaf(node: TSNode): TSNode | null {
   const wrappers = new Set([
@@ -35,4 +35,13 @@ export function findIdentifierLeaf(node: TSNode): TSNode | null {
   }
 
   return null;
+}
+
+// web-tree-sitter types child arrays as (Node | null)[]; real children are never null.
+export function namedChildren(node: TSNode): TSNode[] {
+  return node.namedChildren.filter((child): child is TSNode => child !== null);
+}
+
+export function children(node: TSNode): TSNode[] {
+  return node.children.filter((child): child is TSNode => child !== null);
 }

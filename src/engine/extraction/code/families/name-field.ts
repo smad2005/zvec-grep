@@ -1,4 +1,4 @@
-import type { TSNode } from "../tree-sitter/nodes.js";
+import { namedChildren, type TSNode } from "../tree-sitter/nodes.js";
 import type { LanguageAdapter } from "../adapter.js";
 import {
   extractCommonModifiers,
@@ -35,7 +35,7 @@ export function createNameFieldAdapter(
 }
 
 function findNamedIdentifierChild(node: TSNode): TSNode | undefined {
-  return node.namedChildren.find(
+  return namedChildren(node).find(
     (child) =>
       child.type === "identifier" ||
       child.type === "property_identifier" ||
