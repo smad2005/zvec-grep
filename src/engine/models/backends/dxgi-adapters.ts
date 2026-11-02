@@ -92,8 +92,18 @@ export function selectLargestAdapter(
 }
 
 export function listDxgiAdapters(): Promise<DxgiAdapter[]> {
+  return runPowerShellScript(SCRIPT).then((stdout) =>
+    stdout === undefined ? [] : parseDxgiAdapters(stdout),
+  );
+}
+
+/** Runs a script with Windows PowerShell; undefined when it fails. */
+export function runPowerShellScript(
+  script: string,
+): Promise<string | undefined> {
+  // Here-strings in -EncodedCommand scripts parse reliably only with CRLF.
   const encoded = Buffer.from(
-    SCRIPT.replace(/\r?\n/g, "\r\n"),
+    script.replace(/\r?\n/g, "\r\n"),
     "utf16le",
   ).toString("base64");
   return new Promise((resolve) => {
@@ -102,7 +112,7 @@ export function listDxgiAdapters(): Promise<DxgiAdapter[]> {
       ["-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
       { timeout: 15_000, windowsHide: true },
       (error, stdout) => {
-        resolve(error ? [] : parseDxgiAdapters(String(stdout)));
+        resolve(error ? undefined : String(stdout));
       },
     );
   });

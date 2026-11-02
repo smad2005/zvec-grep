@@ -6,6 +6,7 @@ import { colorModeFromArgs, printError } from "./errors.js";
 import { printHelp } from "./help.js";
 import { installStdoutErrorHandler } from "./stdio.js";
 import { readPackageVersion } from "./version.js";
+import { runIndexOnLargestVulkanDevice } from "./vulkan-device.js";
 
 const PACKAGE_VERSION = readPackageVersion();
 
@@ -33,6 +34,12 @@ async function main(): Promise<void> {
     if (parsed.command === "help") {
       printHelp(PACKAGE_VERSION, parsed.helpTopic);
       process.exitCode = 0;
+      return;
+    }
+
+    const childExitCode = await runIndexOnLargestVulkanDevice(parsed, args);
+    if (childExitCode !== undefined) {
+      process.exitCode = childExitCode;
       return;
     }
 

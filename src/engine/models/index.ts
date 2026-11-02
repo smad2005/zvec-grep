@@ -20,3 +20,8 @@ export {
   resolveEmbeddingReference,
   type ResolveEmbeddingReferenceOptions,
 } from "./resolution.js";
+export {
+  listVulkanDevices,
+  selectLargestVulkanDevice,
+  type VulkanDevice,
+} from "./backends/vulkan-adapters.js";
